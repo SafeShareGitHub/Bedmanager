@@ -140,7 +140,7 @@ class _PageWrapperState extends State<PageWrapper> {
       case 1:
         return Page2(); // Atlantic
       case 2:
-        return Page3(); // Harmony
+        return Harmony(); // Harmony
       case 3:
         return Page4(); // Neptune
       case 4:
