@@ -75,6 +75,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Exporta relatório como JSON
   Future<void> _exportReport() async {
     final beds = await _fetchAllBeds();
+    // ordenar antes de exportar
+    beds.sort((a, b) {
+      final r = (a['roomId'] as String).compareTo(b['roomId'] as String);
+      if (r != 0) return r;
+      final ai =
+          int.tryParse((a['bedId'] as String).replaceAll(RegExp(r'\D'), '')) ??
+              0;
+      final bi =
+          int.tryParse((b['bedId'] as String).replaceAll(RegExp(r'\D'), '')) ??
+              0;
+      return ai.compareTo(bi);
+    });
     final report = beds.map((b) {
       final m = b['linens'] as Map<String, dynamic>;
       return {
@@ -82,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
         'cama': b['bedId'],
         for (var key in linens.keys)
           key: m[key]?['lastChanged'] != null
-              ? DateFormat('yyyy-MM-dd')
+              ? DateFormat('dd.MM')
                   .format((m[key]['lastChanged'] as Timestamp).toDate())
               : '-'
       };
@@ -134,13 +146,26 @@ class _HomeScreenState extends State<HomeScreen> {
           for (var b in beds) {
             byRoom.putIfAbsent(b['roomId'], () => []).add(b);
           }
+          // ordenar quartos alfabeticamente
+          final sortedRooms = byRoom.keys.toList()..sort();
 
           return SingleChildScrollView(
             padding: EdgeInsets.all(16),
             child: Column(
-              children: byRoom.entries.map((entry) {
-                final roomId = entry.key;
-                final roomBeds = entry.value;
+              children: sortedRooms.map((roomId) {
+                final roomBeds = byRoom[roomId]!;
+
+                // ordenar camas numericamente
+                roomBeds.sort((a, b) {
+                  final ai = int.tryParse((a['bedId'] as String)
+                          .replaceAll(RegExp(r'\D'), '')) ??
+                      0;
+                  final bi = int.tryParse((b['bedId'] as String)
+                          .replaceAll(RegExp(r'\D'), '')) ??
+                      0;
+                  return ai.compareTo(bi);
+                });
+
                 return Card(
                   margin: EdgeInsets.only(bottom: 24),
                   child: Padding(
@@ -173,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       Text(
                                         linensMap[key]?['lastChanged'] == null
                                             ? '-'
-                                            : DateFormat('yyyy-MM-dd').format(
+                                            : DateFormat('dd.MM').format(
                                                 (linensMap[key]['lastChanged']
                                                         as Timestamp)
                                                     .toDate(),
