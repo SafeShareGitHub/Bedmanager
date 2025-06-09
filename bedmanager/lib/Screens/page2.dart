@@ -1,311 +1,248 @@
-import 'dart:convert';
-import 'dart:html' as html;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-class Page2 extends StatefulWidget {
-  @override
-  _Page2State createState() => _Page2State();
-}
+class Atlantic extends StatelessWidget {
+  // IDs das camas
+  final List<String> bedIds = [
+    'bed1',
+    'bed2',
+    'bed3',
+    'bed4',
+    'bed5',
+    'bed6',
+    'bed7',
+    'bed8'
+  ];
 
-class _Page2State extends State<Page2> {
-  final TextEditingController rowController = TextEditingController();
-  final TextEditingController columnController = TextEditingController();
+  // Tipos de roupa de cama e seus rótulos em abreviação
+  final Map<String, String> linens = {
+    'fronha': 'Fr',
+    'lencol_elastico': 'El',
+    'lencol_sem_elastico': 'S/E',
+    'capa_edredom': 'Ed',
+  };
 
-  List<String> rows = [];
-  List<String> columns = [];
-  List<List<String>> matrixData = [];
-  String csvResult = '';
+  // Referência ao documento da cama
+  DocumentReference _bedDoc(String bedId) => FirebaseFirestore.instance
+      .collection('rooms')
+      .doc('atlantic')
+      .collection('beds')
+      .doc(bedId);
+
+  // Sub-coleção de logs
+  CollectionReference _logsCol(String bedId) =>
+      _bedDoc(bedId).collection('logs');
+
+  bool _isToday(Timestamp ts) {
+    final d = ts.toDate();
+    final now = DateTime.now();
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Jobs'),
+        title: Text('Atlantic – Visão geral'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // --- Zeilen- und Spalten hinzufügen ---
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: rowController,
-                    decoration: InputDecoration(
-                      labelText: 'Neue Zeile hinzufügen',
-                      border: OutlineInputBorder(),
-                    ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: bedIds.map((bedId) {
+          return StreamBuilder<DocumentSnapshot>(
+            stream: _bedDoc(bedId).snapshots(),
+            builder: (ctx, snap) {
+              if (snap.hasError) {
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ListTile(
+                    title: Text('Erro: ${snap.error}'),
+                  ),
+                );
+              }
+              final data = (snap.data?.data() as Map<String, dynamic>?) ?? {};
+              final map = data['linens'] as Map<String, dynamic>? ?? {};
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 24),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Cabeçalho com "Alterar tudo"
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Cama ${bedId.replaceAll('bed', '')}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              try {
+                                // cria logs e atualiza todos os itens
+                                for (var key in linens.keys) {
+                                  await _logsCol(bedId).add({
+                                    'linen': key,
+                                    'changedAt': FieldValue.serverTimestamp(),
+                                  });
+                                }
+                                final updateMap = {
+                                  'linens': {
+                                    for (var key in linens.keys)
+                                      key: {
+                                        'lastChanged':
+                                            FieldValue.serverTimestamp()
+                                      }
+                                  }
+                                };
+                                await _bedDoc(bedId).set(
+                                  updateMap,
+                                  SetOptions(merge: true),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Tudo alterado')),
+                                );
+                              } catch (err) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Erro: $err')),
+                                );
+                              }
+                            },
+                            child: Text('Tudo'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          columns: [
+                            DataColumn(label: Text('Item')),
+                            DataColumn(label: Text('Última')),
+                            DataColumn(label: Text('Ação')),
+                          ],
+                          rows: linens.entries.map((e) {
+                            final key = e.key;
+                            final label = e.value;
+                            final ts = (map[key]
+                                    as Map<String, dynamic>?)?['lastChanged']
+                                as Timestamp?;
+                            final dateText = ts == null
+                                ? '-'
+                                : DateFormat('yyyy-MM-dd').format(ts.toDate());
+                            final wasToday = ts != null && _isToday(ts);
+
+                            return DataRow(cells: [
+                              DataCell(Text(label)),
+                              DataCell(Row(
+                                children: [
+                                  Text(dateText),
+                                  if (wasToday) ...[
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.check_circle,
+                                        color: Colors.green, size: 16),
+                                  ]
+                                ],
+                              )),
+                              DataCell(Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      try {
+                                        await _logsCol(bedId).add({
+                                          'linen': key,
+                                          'changedAt':
+                                              FieldValue.serverTimestamp(),
+                                        });
+                                        await _bedDoc(bedId).set({
+                                          'linens': {
+                                            key: {
+                                              'lastChanged':
+                                                  FieldValue.serverTimestamp()
+                                            }
+                                          }
+                                        }, SetOptions(merge: true));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text('Alterado $label')),
+                                        );
+                                      } catch (err) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(content: Text('Erro: $err')),
+                                        );
+                                      }
+                                    },
+                                    child: Text('Alt'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.grey),
+                                    onPressed: () async {
+                                      try {
+                                        final logs = await _logsCol(bedId)
+                                            .where('linen', isEqualTo: key)
+                                            .get();
+                                        var docs = logs.docs;
+                                        if (docs.isEmpty) return;
+                                        docs.sort((a, b) {
+                                          final aTs = (a.data() as Map<String,
+                                                  dynamic>?)?['changedAt']
+                                              as Timestamp?;
+                                          final bTs = (b.data() as Map<String,
+                                                  dynamic>?)?['changedAt']
+                                              as Timestamp?;
+                                          return bTs!.compareTo(aTs!);
+                                        });
+                                        await docs.first.reference.delete();
+                                        Timestamp? prevTs;
+                                        if (docs.length > 1) {
+                                          final m = docs[1].data()
+                                              as Map<String, dynamic>?;
+                                          prevTs =
+                                              m?['changedAt'] as Timestamp?;
+                                        }
+                                        await _bedDoc(bedId).set({
+                                          'linens': {
+                                            key: {'lastChanged': prevTs}
+                                          }
+                                        }, SetOptions(merge: true));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text('Desfeito $label')),
+                                        );
+                                      } catch (err) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(content: Text('Erro: $err')),
+                                        );
+                                      }
+                                    },
+                                    child: Text('Desfazer'),
+                                  ),
+                                ],
+                              )),
+                            ]);
+                          }).toList(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _addRow,
-                  child: Text('Zeile hinzufügen'),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: TextField(
-                    controller: columnController,
-                    decoration: InputDecoration(
-                      labelText: 'Neue Spalte hinzufügen',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _addColumn,
-                  child: Text('Spalte hinzufügen'),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-
-            // --- Buttons: Export, Import ---
-            Row(
-              children: [
-                ElevatedButton(
-                  onPressed: _exportToCsvWeb,
-                  child: Text('Export CSV'),
-                ),
-                SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: _importCsvWeb,
-                  child: Text('Import CSV'),
-                ),
-              ],
-            ),
-            Divider(),
-
-            // --- CSV Ergebnis ---
-            if (csvResult.isNotEmpty)
-              Container(
-                padding: EdgeInsets.all(8.0),
-                color: Colors.grey[200],
-                child: Text(
-                  csvResult,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-
-            // --- Matrix selbst ---
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: _buildMatrixTable(),
-                ),
-              ),
-            ),
-          ],
-        ),
+              );
+            },
+          );
+        }).toList(),
       ),
-    );
-  }
-
-  void _addRow() {
-    final name = rowController.text.trim();
-    if (name.isEmpty) return;
-
-    setState(() {
-      rows.add(name);
-      // Füge der Matrix eine neue Zeile hinzu
-      matrixData.add(List.generate(columns.length, (_) => ""));
-    });
-
-    rowController.clear();
-  }
-
-  void _addColumn() {
-    final name = columnController.text.trim();
-    if (name.isEmpty) return;
-
-    setState(() {
-      columns.add(name);
-      // Füge jeder bestehenden Zeile eine neue Spalte hinzu
-      for (var row in matrixData) {
-        row.add("");
-      }
-    });
-
-    columnController.clear();
-  }
-
-  void _exportToCsvWeb() {
-    final csvBuffer = StringBuffer();
-
-    // Kopfzeile: (leer) + Spaltennamen
-    csvBuffer.write(',');
-    for (final column in columns) {
-      csvBuffer.write('$column,');
-    }
-    csvBuffer.write('\n');
-
-    // Datenzeilen mit Zeilennamen
-    for (int i = 0; i < rows.length; i++) {
-      csvBuffer.write('${rows[i]},');
-      for (int j = 0; j < columns.length; j++) {
-        csvBuffer.write('${matrixData[i][j]},');
-      }
-      csvBuffer.write('\n');
-    }
-
-    final csvString = csvBuffer.toString();
-    final bytes = utf8.encode(csvString);
-    final blob = html.Blob([bytes], 'text/csv');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-
-    final anchor = html.document.createElement('a') as html.AnchorElement
-      ..href = url
-      ..style.display = 'none'
-      ..download = 'matrix_data.csv';
-
-    html.document.body!.children.add(anchor);
-    anchor.click();
-    html.document.body!.children.remove(anchor);
-    html.Url.revokeObjectUrl(url);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('CSV-Download gestartet!')),
-    );
-  }
-
-  void _importCsvWeb() {
-    final uploadInput = html.FileUploadInputElement()..accept = '.csv';
-    uploadInput.click();
-
-    uploadInput.onChange.listen((event) {
-      final file = uploadInput.files?.first;
-      if (file == null) return;
-
-      final reader = html.FileReader();
-      reader.onLoadEnd.listen((event) {
-        if (reader.readyState == html.FileReader.DONE) {
-          final csvString = reader.result as String?;
-          if (csvString == null) return;
-          _parseAndSetCsv(csvString);
-        }
-      });
-      reader.readAsText(file);
-    });
-  }
-
-  void _parseAndSetCsv(String csvString) {
-    if (csvString.trim().isEmpty) return;
-
-    final lines = csvString.split('\n').where((line) => line.trim().isNotEmpty);
-    if (lines.isEmpty) return;
-
-    final header = lines.first.split(',');
-    final columnList =
-        header.sublist(1).where((c) => c.trim().isNotEmpty).toList();
-
-    final newRows = <String>[];
-    final newColumns = <String>[]..addAll(columnList);
-
-    final newMatrixData = <List<String>>[];
-    final dataLines = lines.skip(1);
-
-    for (final line in dataLines) {
-      final columns = line.split(',');
-      if (columns.isEmpty) continue;
-
-      newRows.add(columns.first.trim());
-      final rowData =
-          columns.sublist(1).where((c) => c.trim().isNotEmpty).toList();
-
-      newMatrixData.add(
-        List.generate(newColumns.length, (index) {
-          if (index < rowData.length) {
-            return rowData[index];
-          }
-          return "";
-        }),
-      );
-    }
-
-    setState(() {
-      rows = newRows;
-      columns = newColumns;
-      matrixData = newMatrixData;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('CSV importiert!')),
-    );
-  }
-
-  Widget _buildMatrixTable() {
-    if (rows.isEmpty || columns.isEmpty) {
-      return Center(
-        child: Text(
-          'Noch keine Daten vorhanden.',
-          style: TextStyle(fontSize: 16),
-        ),
-      );
-    }
-
-    return Table(
-      border: TableBorder.all(color: Colors.grey),
-      defaultColumnWidth: IntrinsicColumnWidth(),
-      children: [
-        // Kopfzeile mit Spaltennamen
-        TableRow(
-          children: [
-            Container(
-              padding: EdgeInsets.all(8.0),
-              alignment: Alignment.center,
-              child: Text(''),
-            ),
-            for (final column in columns)
-              Container(
-                padding: EdgeInsets.all(8.0),
-                alignment: Alignment.center,
-                child: Text(
-                  column,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-          ],
-        ),
-        // Zeilen mit Zeilennamen
-        for (int i = 0; i < rows.length; i++)
-          TableRow(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8.0),
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  rows[i],
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              for (int j = 0; j < columns.length; j++)
-                Container(
-                  width: 80,
-                  padding: EdgeInsets.all(4.0),
-                  child: TextField(
-                    controller: TextEditingController(
-                      text: matrixData[i][j],
-                    ),
-                    onChanged: (value) {
-                      matrixData[i][j] = value;
-                    },
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-      ],
     );
   }
 }

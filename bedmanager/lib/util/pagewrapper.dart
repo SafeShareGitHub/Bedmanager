@@ -1,4 +1,3 @@
-import 'package:bedmanager/Screens/page13.dart';
 import 'package:flutter/material.dart';
 import 'package:bedmanager/Screens/home.dart';
 import 'package:bedmanager/Screens/page2.dart'; // Atlantic
@@ -12,6 +11,7 @@ import 'package:bedmanager/Screens/page9.dart'; // Sunrise
 import 'package:bedmanager/Screens/page10.dart'; // Sunray
 import 'package:bedmanager/Screens/page11.dart'; // Sunset
 import 'package:bedmanager/Screens/page12.dart'; // Sunshine
+import 'package:bedmanager/Screens/page13.dart'; // Sunday
 
 class PageWrapper extends StatefulWidget {
   final int currentPage;
@@ -63,15 +63,11 @@ class _PageWrapperState extends State<PageWrapper> {
                         isExpanded ? Icons.arrow_back : Icons.arrow_forward,
                         color: Colors.blue,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          isExpanded = !isExpanded;
-                        });
-                      },
+                      onPressed: () => setState(() => isExpanded = !isExpanded),
                     ),
                     if (isExpanded)
                       Text(
-                        "Quaternion",
+                        "Bedmanager",
                         style: TextStyle(
                           color: Colors.blue,
                           fontWeight: FontWeight.bold,
@@ -84,31 +80,57 @@ class _PageWrapperState extends State<PageWrapper> {
             ),
             destinations: [
               NavigationRailDestination(
-                  icon: Icon(Icons.home), label: Text('Home')),
+                icon: Icon(Icons.home),
+                label: Text('Home'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.waves), label: Text('Atlantic')),
+                icon: Icon(Icons.water),
+                label: Text('Atlantic'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.spa), label: Text('Harmony')),
+                icon: Icon(Icons.spa),
+                label: Text('Harmony'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.water), label: Text('Neptune')),
+                icon: Icon(Icons.water_damage),
+                label: Text('Neptune'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.sailing), label: Text('Ocean')),
+                icon: Icon(Icons.sailing),
+                label: Text('Ocean'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.landscape), label: Text('Pacific')),
+                icon: Icon(Icons.landscape),
+                label: Text('Pacific'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.self_improvement), label: Text('Peace')),
+                icon: Icon(Icons.self_improvement),
+                label: Text('Peace'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.wb_sunny), label: Text('Sunlight')),
+                icon: Icon(Icons.wb_sunny),
+                label: Text('Sunlight'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.sunny), label: Text('Sunrise')),
+                icon: Icon(Icons.brightness_5),
+                label: Text('Sunrise'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.light_mode), label: Text('Sunray')),
+                icon: Icon(Icons.brightness_7),
+                label: Text('Sunray'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.nightlight_round), label: Text('Sunset')),
+                icon: Icon(Icons.brightness_3),
+                label: Text('Sunset'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.wb_incandescent), label: Text('Sunshine')),
+                icon: Icon(Icons.wb_incandescent),
+                label: Text('Sunshine'),
+              ),
               NavigationRailDestination(
-                  icon: Icon(Icons.calendar_today), label: Text('Sunday')),
+                icon: Icon(Icons.calendar_today),
+                label: Text('Sunday'),
+              ),
             ],
           ),
           Expanded(
@@ -138,31 +160,31 @@ class _PageWrapperState extends State<PageWrapper> {
       case 0:
         return HomeScreen();
       case 1:
-        return Page2(); // Atlantic
+        return Atlantic();
       case 2:
-        return Harmony(); // Harmony
+        return Harmony();
       case 3:
-        return Page4(); // Neptune
+        return Neptune();
       case 4:
-        return Page5(); // Ocean
+        return Ocean();
       case 5:
-        return Page6(); // Pacific
+        return Pacific();
       case 6:
-        return Page7(); // Peace
+        return Peace();
       case 7:
-        return Page8(); // Sunlight
+        return Sunlight();
       case 8:
-        return Page9(); // Sunrise
+        return Sunrise();
       case 9:
-        return Page10(); // Sunray
+        return Sunray();
       case 10:
-        return Page11(); // Sunset
+        return Sunset();
       case 11:
-        return Page12(); // Sunshine
+        return Sunshine();
       case 12:
-        return Page13(); // Sunday
+        return Sunday();
       default:
-        return Center(child: Text('Page not found'));
+        return Center(child: Text('Página não encontrada'));
     }
   }
 }

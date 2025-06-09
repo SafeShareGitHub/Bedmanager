@@ -3,32 +3,36 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class Harmony extends StatelessWidget {
-  // IDs der Betten
+  // IDs das camas
   final List<String> bedIds = ['bed1', 'bed2', 'bed3'];
 
-  // Linen‐Typen und ihre Labels
+  // Tipos de roupa de cama e seus rótulos abreviados
   final Map<String, String> linens = {
-    'fronha': 'Fronha',
-    'lencol_elastico': 'Lençol com elástico',
-    'lencol_sem_elastico': 'Lençol sem elástico',
-    'capa_edredom': 'Capa de edredom',
+    'fronha': 'Fr',
+    'lencol_elastico': 'Elast',
+    'lencol_sem_elastico': 'S/E',
+    'capa_edredom': 'Ed',
   };
 
-  // Referenz zum Bett‐Dokument
   DocumentReference _bedDoc(String bedId) => FirebaseFirestore.instance
       .collection('rooms')
       .doc('harmony')
       .collection('beds')
       .doc(bedId);
 
-  // Referenz zur Log‐Subcollection
   CollectionReference _logsCol(String bedId) =>
       _bedDoc(bedId).collection('logs');
+
+  bool _isToday(Timestamp ts) {
+    final dt = ts.toDate();
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Harmony – Bettenübersicht')),
+      appBar: AppBar(title: Text('Harmony – Visão geral das camas')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: bedIds.map((bedId) {
@@ -39,11 +43,11 @@ class Harmony extends StatelessWidget {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
                   child: ListTile(
-                    title: Text('Fehler: ${snap.error}'),
+                    title: Text('Erro: ${snap.error}'),
                   ),
                 );
               }
-              // Rohdaten oder leere Map
+
               final data = (snap.data?.data() as Map<String, dynamic>?) ?? {};
               final map = data['linens'] as Map<String, dynamic>? ?? {};
 
@@ -54,10 +58,53 @@ class Harmony extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Bett ${bedId.replaceAll('bed', '')}',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                      // Título da cama + botão "Tudo"
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Cama ${bedId.replaceAll('bed', '')}',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              try {
+                                // 1) Criar logs para cada item
+                                for (var key in linens.keys) {
+                                  await _logsCol(bedId).add({
+                                    'linen': key,
+                                    'changedAt': FieldValue.serverTimestamp(),
+                                  });
+                                }
+                                // 2) Atualizar todos os lastChanged de uma só vez
+                                final updateMap = {
+                                  'linens': {
+                                    for (var key in linens.keys)
+                                      key: {
+                                        'lastChanged':
+                                            FieldValue.serverTimestamp()
+                                      }
+                                  }
+                                };
+                                await _bedDoc(bedId).set(
+                                  updateMap,
+                                  SetOptions(merge: true),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content:
+                                          Text('Todas as trocas registradas')),
+                                );
+                              } catch (err) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Erro: $err')),
+                                );
+                              }
+                            },
+                            child: Text('Tudo'),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       SingleChildScrollView(
@@ -65,120 +112,111 @@ class Harmony extends StatelessWidget {
                         child: DataTable(
                           columns: const [
                             DataColumn(label: Text('Item')),
-                            DataColumn(label: Text('Letzter Wechsel')),
-                            DataColumn(label: Text('Aktion')),
+                            DataColumn(label: Text('Última')),
+                            DataColumn(label: Text('Ação')),
                           ],
                           rows: linens.entries.map((e) {
                             final key = e.key;
                             final label = e.value;
-                            // Datum auslesen (nullable)
                             final ts = (map[key]
                                     as Map<String, dynamic>?)?['lastChanged']
                                 as Timestamp?;
                             final dateText = ts == null
                                 ? '-'
-                                : DateFormat('yyyy-MM-dd HH:mm')
-                                    .format(ts.toDate());
+                                : DateFormat('yyyy-MM-dd').format(ts.toDate());
+                            final wasToday = ts != null && _isToday(ts);
 
                             return DataRow(cells: [
                               DataCell(Text(label)),
-                              DataCell(Text(dateText)),
+                              DataCell(Row(
+                                children: [
+                                  Text(dateText),
+                                  if (wasToday) ...[
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.check_circle,
+                                        color: Colors.green, size: 16),
+                                  ]
+                                ],
+                              )),
                               DataCell(Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // Changed‐Button
                                   ElevatedButton(
                                     onPressed: () async {
                                       try {
-                                        // 1) Log anlegen
                                         await _logsCol(bedId).add({
                                           'linen': key,
                                           'changedAt':
                                               FieldValue.serverTimestamp(),
                                         });
-                                        // 2) lastChanged im Hauptdokument
                                         await _bedDoc(bedId).set({
                                           'linens': {
                                             key: {
                                               'lastChanged':
-                                                  FieldValue.serverTimestamp(),
+                                                  FieldValue.serverTimestamp()
                                             }
                                           }
                                         }, SetOptions(merge: true));
                                         ScaffoldMessenger.of(context)
-                                            .showSnackBar(SnackBar(
-                                          content: Text(
-                                              'Wechsel $label gespeichert'),
-                                        ));
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text('Troca de $label')),
+                                        );
                                       } catch (err) {
                                         ScaffoldMessenger.of(context)
-                                            .showSnackBar(SnackBar(
-                                          content: Text('Fehler: $err'),
-                                        ));
+                                            .showSnackBar(
+                                          SnackBar(content: Text('Erro: $err')),
+                                        );
                                       }
                                     },
-                                    child: Text('Changed'),
+                                    child: Text('Alt'),
                                   ),
                                   const SizedBox(width: 8),
-                                  // Undo‐Button
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.grey,
-                                    ),
+                                        backgroundColor: Colors.grey),
                                     onPressed: () async {
                                       try {
-                                        // 1) Die letzten zwei Logs laden
-                                        final logsSnapshot =
-                                            await _logsCol(bedId)
-                                                .where('linen', isEqualTo: key)
-                                                .orderBy('changedAt',
-                                                    descending: true)
-                                                .limit(2)
-                                                .get();
-
-                                        final docs = logsSnapshot.docs;
+                                        final snapshot = await _logsCol(bedId)
+                                            .where('linen', isEqualTo: key)
+                                            .get();
+                                        var docs = snapshot.docs;
                                         if (docs.isEmpty) return;
-
-                                        // 2) Letzten Eintrag löschen
+                                        docs.sort((a, b) {
+                                          final aTs = (a.data() as Map<String,
+                                                  dynamic>?)?['changedAt']
+                                              as Timestamp?;
+                                          final bTs = (b.data() as Map<String,
+                                                  dynamic>?)?['changedAt']
+                                              as Timestamp?;
+                                          return bTs!.compareTo(aTs!);
+                                        });
                                         await docs.first.reference.delete();
-
-                                        // 3) Vorherigen Timestamp ermitteln, falls vorhanden
                                         Timestamp? prevTs;
                                         if (docs.length > 1) {
-                                          // data() kann null oder ein beliebiger Object-Typ sein, daher casten
-                                          final Map<String, dynamic>? dataMap =
-                                              docs[1].data()
-                                                  as Map<String, dynamic>?;
-                                          prevTs = dataMap == null
-                                              ? null
-                                              : (dataMap['changedAt']
-                                                  as Timestamp?);
+                                          final m = docs[1].data()
+                                              as Map<String, dynamic>?;
+                                          prevTs =
+                                              m?['changedAt'] as Timestamp?;
                                         }
-
-                                        // 4) lastChanged im Hauptdokument zurücksetzen
                                         await _bedDoc(bedId).set({
                                           'linens': {
-                                            key: {
-                                              'lastChanged': prevTs,
-                                            }
+                                            key: {'lastChanged': prevTs}
                                           }
                                         }, SetOptions(merge: true));
-
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
                                           SnackBar(
-                                              content: Text(
-                                                  'Undo für $label ausgeführt')),
+                                              content: Text('Desfeito $label')),
                                         );
                                       } catch (err) {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
-                                          SnackBar(
-                                              content: Text('Fehler: $err')),
+                                          SnackBar(content: Text('Erro: $err')),
                                         );
                                       }
                                     },
-                                    child: Text('Undo'),
+                                    child: Text('Desfazer'),
                                   ),
                                 ],
                               )),
